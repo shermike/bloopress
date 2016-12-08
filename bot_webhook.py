@@ -7,22 +7,12 @@ import sqlite3
 import datetime
 import tempfile
 import os
+from jinja2 import Template
 
 import matplotlib
 # Force matplotlib to not use any Xwindows backend. 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
-WEBHOOK_HOST = '188.120.241.60'
-WEBHOOK_PORT = 443
-WEBHOOK_LISTEN = '188.120.241.60'
-
-WEBHOOK_SSL_CERT = 'cert/webhook_cert.pem'
-WEBHOOK_SSL_PRIV = 'cert/webhook_pkey.pem'
-
-WEBHOOK_URL_BASE = "https://%s:%s" % (WEBHOOK_HOST, WEBHOOK_PORT)
-WEBHOOK_URL_PATH = "/%s/" % (config.token)
-
 
 bot = telebot.TeleBot(config.token)
 
@@ -39,6 +29,20 @@ class WebhookServer(object):
             return ''
         else:
             raise cherrypy.HTTPError(403)
+
+def gen_html(fname, cursor):
+    cursor.execute('SELECT * FROM pressure')
+    data = cursor.fetchall()
+    with open(fname, 'w') as f:
+        t = Template('templates/index.tmpl.html')
+        f.write(t.render(press_data=data))
+
+@bot.message_handler(commands=['update'])
+def tg_update(message):
+    db = sqlite3.connect('data.db')
+    cursor = db.cursor()
+    gen_html('/var/www/html/index.html', cursor)
+    db.close()
 
 @bot.message_handler(commands=['add'])
 def enter_pressure(message):
@@ -59,6 +63,8 @@ def enter_pressure(message):
     bot.send_message(message.chat.id, values)
     
     db.commit()
+    
+    gen_html('/var/www/html/index.html', cursor)
     db.close()
 
 
@@ -104,16 +110,26 @@ def print_last(message):
     db.close()
 
 
+WEBHOOK_HOST = '188.120.241.60'
+WEBHOOK_PORT = 443
+WEBHOOK_LISTEN = '188.120.241.60'
+
+WEBHOOK_SSL_CERT = 'cert/webhook_cert.pem'
+WEBHOOK_SSL_PRIV = 'cert/webhook_pkey.pem'
+
+WEBHOOK_URL_BASE = "https://%s:%s" % (WEBHOOK_HOST, WEBHOOK_PORT)
+WEBHOOK_URL_PATH = "/%s/" % (config.token)
+
+
 while True:
     try:
         print "Run bot..."
-
 
         bot.remove_webhook()
 
         bot.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH,
                 certificate=open(WEBHOOK_SSL_CERT, 'r'))
-				
+
         cherrypy.config.update({
             'server.socket_host': WEBHOOK_LISTEN,
             'server.socket_port': WEBHOOK_PORT,
