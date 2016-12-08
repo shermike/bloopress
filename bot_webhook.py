@@ -31,18 +31,22 @@ class WebhookServer(object):
             raise cherrypy.HTTPError(403)
 
 def gen_html(fname, cursor):
-    cursor.execute('SELECT * FROM pressure')
+    cursor.execute('SELECT date,systolic,diastolic,pulse FROM pressure')
     data = cursor.fetchall()
     with open(fname, 'w') as f:
-        t = Template('templates/index.tmpl.html')
-        f.write(t.render(press_data=data))
-
+        t = Template(open('templates/index.tmpl.html').read())
+        f.write(t.render(press_data=reversed(data)))
+#
 @bot.message_handler(commands=['update'])
 def tg_update(message):
-    db = sqlite3.connect('data.db')
-    cursor = db.cursor()
-    gen_html('/var/www/html/index.html', cursor)
-    db.close()
+    try:
+        db = sqlite3.connect('data.db')
+        cursor = db.cursor()
+        gen_html('/var/www/html/index.html', cursor)
+        db.close()
+        bot.send_message(message.chat.id, "Html updated!")
+    except Exception as e:
+        bot.send_message(message.chat.id, "Error: " + str(e))
 
 @bot.message_handler(commands=['add'])
 def enter_pressure(message):
